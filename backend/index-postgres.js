@@ -1,4 +1,4 @@
-require('dotenv').config();
+const { pool, connectDB } = require('./config/database');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -30,13 +30,9 @@ const pool = new Pool({
 });
 
 // Test database connection
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('❌ Database connection error:', err.stack);
-  } else {
-    console.log('✅ PostgreSQL connected successfully');
-    release();
-  }
+connectDB().catch(err => {
+  console.error('Failed to connect to database:', err);
+  process.exit(1);
 });
 
 // Health check
