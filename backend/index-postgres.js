@@ -16,13 +16,25 @@ app.use(express.json());
 app.use(morgan('combined'));
 
 // Database connection
-const pool = new Pool({
-  user: process.env.DB_USER || 'johnchihule',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'wabiz_db',
-  password: process.env.DB_PASSWORD || '',
-  port: process.env.DB_PORT || 5432,
-});
+let pool;
+if (process.env.DATABASE_URL) {
+  // Production on Fly.io or Railway
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+  console.log('📡 Using DATABASE_URL for connection');
+} else {
+  // Local development
+  pool = new Pool({
+    user: process.env.DB_USER || 'johnchihule',
+    host: process.env.DB_HOST || 'localhost',
+    database: process.env.DB_NAME || 'wabiz_db',
+    password: process.env.DB_PASSWORD || '',
+    port: process.env.DB_PORT || 5432,
+  });
+  console.log('📡 Using local PostgreSQL');
+}
 
 // Test database connection
 pool.connect((err, client, release) => {
