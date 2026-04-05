@@ -18,13 +18,9 @@ app.use(morgan('combined'));
 // Database connection
 let pool;
 if (process.env.DATABASE_URL) {
-  // Production on Fly.io or Railway
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-  });
-  console.log('📡 Using DATABASE_URL for connection');
+  pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 } else {
+ 
   // Local development
   pool = new Pool({
     user: process.env.DB_USER || 'johnchihule',
