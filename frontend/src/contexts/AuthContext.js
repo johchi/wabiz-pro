@@ -4,20 +4,29 @@ import toast from 'react-hot-toast';
 
 const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      fetchUser();
-    } else {
-      setLoading(false);
-    }
+    const initAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        await fetchUser();
+      } else {
+        setLoading(false);
+      }
+    };
+    initAuth();
   }, []);
 
   const fetchUser = async () => {
@@ -43,11 +52,11 @@ export const AuthProvider = ({ children }) => {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(user);
       toast.success(`Welcome back, ${user.name}!`);
-      return true;
+      return { success: true };
     } catch (error) {
-      const errorMsg = error.response?.data?.error || 'Login failed';
+      const errorMsg = error.response?.data?.error || 'Login failed. Please try again.';
       toast.error(errorMsg);
-      return false;
+      return { success: false, error: errorMsg };
     }
   };
 
@@ -60,12 +69,12 @@ export const AuthProvider = ({ children }) => {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(user);
       toast.success(`Welcome to WaBiz Pro, ${user.name}!`);
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('Registration error:', error.response?.data);
       const errorMsg = error.response?.data?.error || 'Registration failed. Please try again.';
       toast.error(errorMsg);
-      return false;
+      return { success: false, error: errorMsg };
     }
   };
 
@@ -81,8 +90,18 @@ export const AuthProvider = ({ children }) => {
     return user?.role === 'admin';
   };
 
+  const value = {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    isAdmin,
+    refreshUser: fetchUser
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, isAdmin }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
