@@ -433,3 +433,20 @@ app.listen(PORT, () => {
   console.log(`🔑 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 Allowed Origins: ${allowedOrigins.join(', ')}\n`);
 });
+// Health check
+app.get('/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ 
+      status: 'healthy', 
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      status: 'unhealthy', 
+      error: 'Database connection failed',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
