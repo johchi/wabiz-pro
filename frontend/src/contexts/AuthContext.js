@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
-import toast from 'react-hot-toast';   // <-- ADD THIS LINE
+import toast from 'react-hot-toast';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://wabiz-backend.up.railway.app';
 
@@ -13,9 +13,14 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
 
-  if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  }
+  // Set axios auth header whenever token changes
+  useEffect(() => {
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete axios.defaults.headers.common['Authorization'];
+    }
+  }, [token]);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -34,7 +39,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('user', JSON.stringify(user));
         setToken(token);
         setUser(user);
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        toast.success('Welcome back!');
         return true;
       }
       return false;
@@ -53,6 +58,7 @@ export const AuthProvider = ({ children }) => {
         name: userData.name
       });
       if (response.data.success) {
+        toast.success('Account created successfully!');
         return await login(userData.email, userData.password);
       }
       return false;
@@ -68,7 +74,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);
-    delete axios.defaults.headers.common['Authorization'];
+    toast.success('Logged out successfully');
   };
 
   const value = {
