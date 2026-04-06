@@ -18,9 +18,11 @@ app.use(morgan('combined'));
 // Database connection
 let pool;
 if (process.env.DATABASE_URL) {
-  pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
 } else {
- 
   // Local development
   pool = new Pool({
     user: process.env.DB_USER || 'johnchihule',
@@ -51,9 +53,8 @@ app.get('/health', (req, res) => {
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  
   if (!token) return res.status(401).json({ error: 'Access token required' });
-  
+
   jwt.verify(token, process.env.JWT_SECRET || 'secret', (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid or expired token' });
     req.user = user;
@@ -65,33 +66,33 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/users/register', async (req, res) => {
   try {
     const { email, password, name } = req.body;
-    
+
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'All fields are required' });
     }
-    
+
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
-    
+
     const existingUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (existingUser.rows.length > 0) {
       return res.status(400).json({ error: 'Email already registered' });
     }
-    
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
       'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, role',
       [email, hashedPassword, name]
     );
-    
+
     const user = result.rows[0];
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET || 'secret',
       { expiresIn: '7d' }
     );
-    
+
     res.status(201).json({ user, token });
   } catch (error) {
     console.error('Registration error:', error);
@@ -103,28 +104,28 @@ app.post('/api/users/register', async (req, res) => {
 app.post('/api/users/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
+
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
-    
+
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
+
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
+
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET || 'secret',
       { expiresIn: '7d' }
     );
-    
-    res.json({ 
+
+    res.json({
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
-      token 
+      token
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -170,7 +171,10 @@ app.get('/api/payments/recent', authenticateToken, async (req, res) => {
 
 app.get('/api/payments/revenue', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query("SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE user_id = $1 AND status = 'completed'", [req.user.userId]);
+    const result = await pool.query(
+      "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE user_id = $1 AND status = 'completed'",
+      [req.user.userId]
+    );
     res.json({ total: parseFloat(result.rows[0].total) });
   } catch (error) {
     res.json({ total: 0 });
@@ -185,7 +189,7 @@ app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
   try {
     const { amount, paymentMethod } = req.body;
     const result = await pool.query(
-      `INSERT INTO payments (user_id, amount, status, payment_method, transaction_id) 
+      `INSERT INTO payments (user_id, amount, status, payment_method, transaction_id)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [req.user.userId, amount, 'completed', paymentMethod, `txn_${Date.now()}`]
     );
@@ -211,8 +215,8 @@ app.get('/api/subscriptions/my-subscriptions', authenticateToken, async (req, re
 app.get('/api/subscriptions/active', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM subscriptions 
-       WHERE user_id = $1 AND status = 'active' AND end_date > NOW() 
+      `SELECT * FROM subscriptions
+       WHERE user_id = $1 AND status = 'active' AND end_date > NOW()
        ORDER BY end_date ASC LIMIT 1`,
       [req.user.userId]
     );
@@ -228,9 +232,8 @@ app.post('/api/subscriptions/create', authenticateToken, async (req, res) => {
     const startDate = new Date();
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + durationMonths);
-    
     const result = await pool.query(
-      `INSERT INTO subscriptions (user_id, plan_name, status, start_date, end_date, auto_renew) 
+      `INSERT INTO subscriptions (user_id, plan_name, status, start_date, end_date, auto_renew)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [req.user.userId, planName, 'active', startDate, endDate, true]
     );
@@ -297,7 +300,9 @@ app.get('/api/users/stats', authenticateToken, async (req, res) => {
 
 app.get('/api/subscriptions/stats', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query("SELECT COUNT(*) as active FROM subscriptions WHERE status = 'active' AND end_date > NOW()");
+    const result = await pool.query(
+      "SELECT COUNT(*) as active FROM subscriptions WHERE status = 'active' AND end_date > NOW()"
+    );
     res.json({ active: parseInt(result.rows[0].active) });
   } catch (error) {
     res.json({ active: 0 });
