@@ -29,9 +29,9 @@ pool.on('error', (err) => {
 });
 
 // ---------- Middleware ----------
-// ⚠️ REPLACE 'https://your-frontend.vercel.app' with your actual Vercel URL
+// ⚠️ REPLACE 'https://wabiz-pro.vercel.app' with your actual Vercel URL
 app.use(cors({
-  origin: ['https://your-frontend.vercel.app', 'http://localhost:3000'],
+  origin: ['https://wabiz-pro.vercel.app', 'http://localhost:3000'],
   credentials: true
 }));
 app.use(express.json());
