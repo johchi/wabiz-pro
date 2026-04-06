@@ -28,18 +28,56 @@ pool.on('error', (err) => {
   process.exit(1);
 });
 
-// ---------- Middleware ----------
-// ⚠️ REPLACE 'https://wabiz-pro.vercel.app' with your actual Vercel URL
+// ---------- CORS Configuration ----------
+// Allow Railway frontend and local development
+const allowedOrigins = [
+  process.env.FRONTEND_URL,                    // Railway frontend URL
+  'http://localhost:3000',                     // Local React dev
+  'http://localhost:3001',                     // Alternative local port
+].filter(Boolean); // Remove undefined/null
+
 app.use(cors({
-  origin: ['https://wabiz-pro.vercel.app', 'http://localhost:3000'],
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      console.warn(`⚠️ CORS blocked origin: ${origin}`);
+      return callback(new Error('CORS policy violation'), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
 
 // ---------- Health check endpoint ----------
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    database: 'connected'
+  });
 });
+
+// ---------- Auth Middleware ----------
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    res.status(403).json({ error: 'Invalid or expired token' });
+  }
+};
 
 // ---------- Login endpoint ----------
 app.post('/api/login', async (req, res) => {
@@ -48,7 +86,10 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ error: 'Email and password required' });
   }
   try {
-    const result = await pool.query('SELECT id, email, password_hash FROM users WHERE email = $1', [email]);
+    const result = await pool.query(
+      'SELECT id, email, password_hash, name, role FROM users WHERE email = $1', 
+      [email]
+    );
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -58,14 +99,19 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
     res.json({ 
       success: true, 
       token,
-      user: { id: user.id, email: user.email }
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name,
+        role: user.role 
+      }
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -89,19 +135,24 @@ app.post('/api/register', async (req, res) => {
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name',
-      [email, hashedPassword, name]
+      'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
+      [email, hashedPassword, name, 'user']
     );
     const newUser = result.rows[0];
     const token = jwt.sign(
-      { userId: newUser.id, email: newUser.email },
+      { userId: newUser.id, email: newUser.email, role: newUser.role },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
     res.status(201).json({
       success: true,
       token,
-      user: { id: newUser.id, email: newUser.email, name: newUser.name }
+      user: { 
+        id: newUser.id, 
+        email: newUser.email, 
+        name: newUser.name,
+        role: newUser.role
+      }
     });
   } catch (err) {
     console.error('Registration error:', err);
@@ -109,19 +160,29 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// ---------- Example protected route ----------
-app.get('/api/protected', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-  const token = authHeader.split(' ')[1];
+// ---------- Get current user ----------
+app.get('/api/me', authenticateToken, async (req, res) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    res.json({ message: 'Access granted', user: decoded });
+    const result = await pool.query(
+      'SELECT id, email, name, role, created_at FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ user: result.rows[0] });
   } catch (err) {
-    res.status(403).json({ error: 'Invalid token' });
+    console.error('Get user error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// ---------- Protected route example ----------
+app.get('/api/protected', authenticateToken, (req, res) => {
+  res.json({ 
+    message: 'Access granted', 
+    user: req.user 
+  });
 });
 
 // ---------- 404 handler ----------
@@ -131,12 +192,13 @@ app.use((req, res) => {
 
 // ---------- Global error handler ----------
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal server error' });
+  console.error('Error:', err.stack);
+  res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-// ---------- Start server (MUST be after all routes) ----------
+// ---------- Start server ----------
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`✅ Health check: http://localhost:${PORT}/health`);
+  console.log(`📝 Allowed origins:`, allowedOrigins);
 });
