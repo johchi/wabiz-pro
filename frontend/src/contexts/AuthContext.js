@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://wabiz-backend.up.railway.app';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://wabiz-backend.up.railway.app/api';
 
 const AuthContext = createContext();
 
@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/login`, { email, password });
+      const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
       if (response.data.success) {
         const { token, user } = response.data;
         localStorage.setItem('token', token);
@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/register`, {
+      const response = await axios.post(`${API_BASE_URL}/register`, {
         email: userData.email,
         password: userData.password,
         name: userData.name
